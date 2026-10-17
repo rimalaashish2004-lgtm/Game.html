@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fruit Unscramble - Modern Word Game</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            450: '#27ae60',
+                            550: '#219653',
+                            650: '#1e8449',
+                        }
+                    },
+                    animation: {
+                        'float-slow': 'float 6s ease-in-out infinite',
+                        'float-delayed': 'float 6s ease-in-out 3s infinite',
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'bounce-short': 'bounceShort 0.5s ease-out 1',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-12px)' },
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+                            '50%': { opacity: '1', transform: 'scale(1.05)' },
+                        },
+                        bounceShort: {
+                            '0%': { transform: 'scale(0.8)' },
+                            '50%': { transform: 'scale(1.15)' },
+                            '100%': { transform: 'scale(1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: #0f172a;
+        }
+
+        /* Glassmorphism Styles */
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 30px rgba(39, 174, 96, 0.08);
+        }
+
+        .glass-pill {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Letter Tile Animations */
+        .letter-tile {
+            perspective: 1000px;
+            animation: tileAppear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            opacity: 0;
+            transform: translateY(15px) scale(0.8);
+        }
+
+        @keyframes tileAppear {
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Shake animation for wrong guess */
+        .shake {
+            animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        /* High contrast focus ring */
+        *:focus-visible {
+            outline: 3px solid #27ae60 !important;
+            outline-offset: 3px !important;
+        }
+
+        /* Circular Timer Progress Arc */
+        .timer-circle-bg {
+            stroke: rgba(255, 255, 255, 0.1);
+        }
+        .timer-circle-progress {
+            stroke: #27ae60;
+            stroke-dasharray: 100;
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+        }
+
+        /* Neon glow utilities */
+        .glow-emerald {
+            box-shadow: 0 0 20px rgba(39, 174, 96, 0.35);
+        }
+        .glow-emerald-lg {
+            box-shadow: 0 0 35px rgba(39, 174, 96, 0.45);
+        }
+    </style>
+</head>
+<body class="h-full text-slate-100 flex items-center justify-center p-3 sm:p-5 relative overflow-x-hidden selection:bg-emerald-500 selection:text-white">
+
+    <!-- Glowing Background Ambient Orbs -->
+    <div class="fixed top-1/4 -left-20 w-72 h-72 sm:w-96 sm:h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-float-slow" aria-hidden="true"></div>
+    <div class="fixed bottom-1/4 -right-20 w-72 h-72 sm:w-96 sm:h-96 bg-teal-500/20 rounded-full blur-[100px] pointer-events-none animate-float-delayed" aria-hidden="true"></div>
+    <div class="fixed top-10 right-1/4 w-60 h-60 bg-amber-500/10 rounded-full blur-[90px] pointer-events-none" aria-hidden="true"></div>
+
+    <!-- Mute / Sound Toggle Floating Button -->
+    <button 
+        id="sound-toggle-btn"
+        onclick="toggleSound()" 
+        aria-label="Toggle sound effects"
+        title="Toggle sound effects"
+        class="fixed top-4 right-4 z-50 w-11 h-11 rounded-full glass-pill flex items-center justify-center text-slate-300 hover:text-white hover:border-emerald-500/50 transition-all duration-300 active:scale-95 shadow-lg group cursor-pointer">
+        <i id="sound-icon" class="fa-solid fa-volume-high text-emerald-400 group-hover:scale-110 transition-transform" aria-hidden="true"></i>
+    </button>
+
+    <!-- Main Card Container -->
+    <main class="w-full max-w-lg glass-card rounded-3xl p-4 sm:p-7 relative z-10 my-auto border border-white/10 transition-all duration-300">
+        
+        <!-- Game Section -->
+        <section id="game-screen" aria-label="Word Unscramble Game">
+            
+            <!-- Game Header & Badge -->
+            <header class="text-center mb-5 relative">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2 shadow-inner">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Fruit Edition</span>
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+                    <span>Fruit Unscramble</span>
+                    <i class="fa-solid fa-lemon text-amber-400 text-xl" aria-hidden="true"></i>
+                </h1>
+            </header>
+
+            <!-- Top Header Pill Bar -->
+            <div id="stats-bar" class="glass-pill rounded-2xl px-4 py-2.5 mb-5 flex items-center justify-between shadow-lg relative overflow-hidden" role="region" aria-label="Game Statistics">
+                <!-- Score Badge -->
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-amber-500/20 shrink-0" aria-hidden="true">
+                        <i class="fa-solid fa-trophy"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Score</div>
+                        <div id="score" class="text-sm sm:text-base font-extrabold text-white leading-none" aria-label="Score: 0 of 10">0/10</div>
+                    </div>
+                </div>
+
+                <!-- Animated Circular Timer Widget -->
+                <div class="flex items-center gap-2.5 px-3 py-1 rounded-xl bg-slate-900/50 border border-white/5">
+                    <div class="relative w-8 h-8 flex items-center justify-center shrink-0">
+                        <svg class="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                            <path class="timer-circle-bg" stroke-width="3.5" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path id="timer-progress-arc" class="timer-circle-progress" stroke-width="3.5" stroke-linecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <i id="timer-icon" class="fa-solid fa-stopwatch absolute text-[10px] text-emerald-400" aria-hidden="true"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Time</div>
+                        <div id="timer" class="text-sm sm:text-base font-extrabold text-white leading-none tracking-tight" aria-live="off" aria-label="Time remaining: 30 seconds">30s</div>
+                    </div>
+                </div>
+
+                <!-- Progress Counter -->
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-emerald-500/20 shrink-0" aria-hidden="true">
+                        <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Level</div>
+                        <div id="progress" class="text-sm sm:text-base font-extrabold text-white leading-none" aria-label="Progress: 1 of 10">1/10</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scrambled Word Glass Card (Dashed Emerald Border) -->
+            <div id="scrambled-card" class="relative rounded-2xl p-4 sm:p-6 mb-5 text-center bg-slate-900/60 border-2 border-dashed border-emerald-500/60 glow-emerald transition-all duration-300 min-h-[145px] flex flex-col items-center justify-center overflow-hidden">
+                <span id="word-prompt-label" class="text-[11px] font-bold text-emerald-400/90 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xs" aria-hidden="true"></i> Unscramble the letters
+                </span>
+
+                <!-- Bouncy Letter Tiles Container -->
+                <div id="scrambled-word-wrapper" class="w-full max-w-full flex justify-center items-center my-1 px-1">
+                    <div id="scrambled-word" 
+                         class="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 max-w-full break-words"
+                         aria-live="polite"
+                         aria-atomic="true"
+                         aria-label="Scrambled fruit word">
+                        <!-- Dynamic Letter Tiles Injected Here -->
+                    </div>
+                </div>
+
+                <!-- Dynamic Hint Tag Box -->
+                <div id="hint-box" 
+                     class="mt-4 text-xs sm:text-sm bg-slate-800/80 border border-amber-500/30 text-amber-200 px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 max-w-md w-full shadow-md backdrop-blur-sm transition-all duration-300"
+                     aria-live="polite">
+                    <i class="fa-solid fa-lightbulb text-amber-400 text-sm shrink-0 animate-pulse" aria-hidden="true"></i>
+                    <span id="hint-text" class="font-medium text-slate-200">Hint will appear here</span>
+                </div>
+            </div>
+
+            <!-- Control Box Form -->
+            <div id="game-controls" class="space-y-4">
+                <form id="answer-form" onsubmit="handleFormSubmit(event)" class="space-y-4" novalidate>
+                    <!-- Input Box -->
+                    <div class="relative">
+                        <label for="user-input" class="sr-only">Type your fruit guess</label>
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-pen-nib text-sm" aria-hidden="true"></i>
+                        </div>
+                        <input 
+                            type="text" 
+                            id="user-input" 
+                            placeholder="Type fruit guess..." 
+                            autocomplete="off"
+                            autofocus
+                            aria-label="Type your fruit guess"
+                            class="w-full pl-11 pr-4 py-3.5 bg-slate-900/80 border-2 border-slate-700/80 rounded-xl text-white font-bold text-base sm:text-lg text-center placeholder-slate-500 focus:outline-none focus:border-emerald-400 focus:bg-slate-900 transition duration-200 uppercase tracking-widest shadow-inner"
+                        />
+                    </div>
+
+                    <!-- ARIA Live Feedback Message -->
+                    <div id="feedback-message" 
+                         class="text-center font-bold text-sm min-h-[24px] flex items-center justify-center transition-all duration-200" 
+                         aria-live="assertive" 
+                         aria-atomic="true">
+                    </div>
+
+                    <!-- Secondary Actions Grid -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <button 
+                            type="button" 
+                            onclick="revealExtraHint()" 
+                            id="hint-btn"
+                            aria-label="Get extra letter hint"
+                            class="px-3 py-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+                            <i class="fa-solid fa-eye text-amber-400" aria-hidden="true"></i> Extra Hint
+                        </button>
+                        <button 
+                            type="button" 
+                            onclick="skipWord()" 
+                            aria-label="Skip to next fruit word"
+                            class="px-3 py-3 bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+                            Skip Word <i class="fa-solid fa-forward-step text-slate-400" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <!-- Action Button (#27ae60) -->
+                    <button 
+                        type="submit" 
+                        id="submit-btn"
+                        aria-label="Submit fruit guess"
+                        class="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:from-emerald-600 active:to-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-500/25 border border-emerald-400/30 transition-all duration-200 active:scale-98 text-base tracking-wide flex items-center justify-center gap-2.5 cursor-pointer">
+                        <span>SUBMIT GUESS</span>
+                        <i class="fa-solid fa-paper-plane text-sm" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="game-over-details" class="hidden text-center space-y-5 pt-1" aria-live="polite">
+                <div class="bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                    <div class="absolute -top-12 -right-12 w-28 h-28 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+                    
+                    <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-2xl mb-3 shadow-inner">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    
+                    <h2 class="text-xs uppercase font-extrabold tracking-widest text-emerald-400 mb-1">Game Completed</h2>
+                    <p id="game-over-final-score" class="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2">Final Score: 0/10</p>
+                    <p id="game-over-accuracy" class="text-xs uppercase font-bold text-amber-400 tracking-wider mb-2">Accuracy: 0%</p>
+                    <p id="game-over-rating" class="text-xs sm:text-sm text-slate-300 font-medium">Great effort!</p>
+                </div>
+
+                <div class="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl text-slate-400 text-xs sm:text-sm">
+                    <i class="fa-solid fa-circle-info text-amber-400 mr-1.5" aria-hidden="true"></i>
+                    Click below to start a brand new scrambled fruit challenge or refresh your browser!
+                </div>
+
+                <button 
+                    onclick="restartGame()" 
+                    aria-label="Play game again"
+                    class="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:from-emerald-600 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 border border-emerald-400/40 transition-all duration-200 active:scale-95 text-base flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-rotate-right text-sm" aria-hidden="true"></i> PLAY AGAIN
+                </button>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Game Engine Script -->
+    <script>
+        // 1. Fruit Dataset
+        const FRUITS = [
+            { name: 'apple', hint: 'Crisp red or green orchard fruit' },
+            { name: 'banana', hint: 'Long yellow tropical fruit rich in potassium' },
+            { name: 'orange', hint: 'Citrus fruit known for its vibrant color & juice' },
+            { name: 'strawberry', hint: 'Juicy red fruit with seeds scattered on the outside' },
+            { name: 'mango', hint: 'Sweet tropical stone fruit with golden orange flesh' },
+            { name: 'pineapple', hint: 'Crown-topped tropical fruit with spiky golden skin' },
+            { name: 'watermelon', hint: 'Large green fruit filled with refreshing red interior' },
+            { name: 'grape', hint: 'Small juicy berry that grows in heavy clusters' },
+            { name: 'peach', hint: 'Fuzzy-skinned stone fruit with sweet pinkish flesh' },
+            { name: 'lemon', hint: 'Zesty sour yellow citrus fruit' }
+        ];
+
+        // 2. Synthesized Sound Engine
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playBoop() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            playCorrect() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const startTime = this.ctx.currentTime + (idx * 0.07);
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, startTime);
+
+                    gain.gain.setValueAtTime(0.2, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.25);
+                });
+            }
+
+            playWrong() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(110, this.ctx.currentTime + 0.25);
+
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playTimeout() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                [220, 164.81].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const startTime = this.ctx.currentTime + (idx * 0.15);
+
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, startTime);
+
+                    gain.gain.setValueAtTime(0.15, startTime);
+                    gain.gain.linearRampToValueAtTime(0.01, startTime + 0.18);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.18);
+                });
+            }
+        }
+
+        const soundSynth = new SoundEngine();
+
+        function toggleSound() {
+            soundSynth.muted = !soundSynth.muted;
+            const icon = document.getElementById('sound-icon');
+            if (soundSynth.muted) {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+            } else {
+                icon.className = 'fa-solid fa-volume-high text-emerald-400';
+                soundSynth.playBoop();
+            }
+        }
+
+        // 3. Game Logic & Controls
+        let currentWordIndex = 0;
+        let solvedCount = 0;
+        let gameWords = [];
+        let currentScrambled = '';
+        let hintExtraUsed = false;
+
+        let timerInterval = null;
+        const INITIAL_TIME = 30;
+        let timeLeft = INITIAL_TIME;
+
+        // Elements
+        const scrambledWordEl = document.getElementById('scrambled-word');
+        const scrambledCardEl = document.getElementById('scrambled-card');
+        const wordPromptLabelEl = document.getElementById('word-prompt-label');
+        const statsBarEl = document.getElementById('stats-bar');
+        const gameControlsEl = document.getElementById('game-controls');
+        const gameOverDetailsEl = document.getElementById('game-over-details');
+        const gameOverFinalScoreEl = document.getElementById('game-over-final-score');
+        const gameOverAccuracyEl = document.getElementById('game-over-accuracy');
+        const gameOverRatingEl = document.getElementById('game-over-rating');
+        const userInputEl = document.getElementById('user-input');
+        const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const timerProgressArc = document.getElementById('timer-progress-arc');
+        const timerIcon = document.getElementById('timer-icon');
+        const progressEl = document.getElementById('progress');
+        const feedbackEl = document.getElementById('feedback-message');
+        const hintBoxEl = document.getElementById('hint-box');
+        const hintTextEl = document.getElementById('hint-text');
+        const hintBtnEl = document.getElementById('hint-btn');
+
+        function shuffleArray(arr) {
+            const result = [...arr];
+            for (let i = result.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+            return result;
+        }
+
+        function getScrambledWord(word) {
+            if (word.length <= 1) return word;
+            let scrambled = word;
+            let attempts = 0;
+            while (scrambled === word && attempts < 25) {
+                scrambled = shuffleArray(word.split('')).join('');
+                attempts++;
+            }
+            return scrambled;
+        }
+
+        function initGame() {
+            clearInterval(timerInterval);
+            gameWords = shuffleArray(FRUITS);
+            currentWordIndex = 0;
+            solvedCount = 0;
+
+            scoreEl.textContent = `0/${gameWords.length}`;
+            scoreEl.setAttribute('aria-label', `Score: 0 of ${gameWords.length}`);
+
+            statsBarEl.classList.remove('hidden');
+            gameControlsEl.classList.remove('hidden');
+            gameOverDetailsEl.classList.add('hidden');
+            wordPromptLabelEl.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-xs" aria-hidden="true"></i> Unscramble the letters`;
+
+            loadWord();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timeLeft = INITIAL_TIME;
+            updateTimerUI();
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerUI();
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeOut();
+                }
+            }, 1000);
+        }
+
+        function updateTimerUI() {
+            timerEl.textContent = `${timeLeft}s`;
+            timerEl.setAttribute('aria-label', `Time remaining: ${timeLeft} seconds`);
+
+            const offset = 100 - (timeLeft / INITIAL_TIME) * 100;
+            timerProgressArc.style.strokeDashoffset = offset;
+
+            if (timeLeft <= 5) {
+                timerProgressArc.style.stroke = '#f43f5e';
+                timerEl.className = "text-sm sm:text-base font-extrabold text-rose-400 animate-pulse";
+                timerIcon.className = "fa-solid fa-stopwatch absolute text-[10px] text-rose-400 animate-ping";
+            } else {
+                timerProgressArc.style.stroke = '#27ae60';
+                timerEl.className = "text-sm sm:text-base font-extrabold text-white";
+                timerIcon.className = "fa-solid fa-stopwatch absolute text-[10px] text-emerald-400";
+            }
+        }
+
+        function handleTimeOut() {
+            soundSynth.playTimeout();
+            userInputEl.disabled = true;
+            const currentItem = gameWords[currentWordIndex];
+
+            showFeedback(`Time's up! The correct fruit was "${currentItem.name.toUpperCase()}"`, 'text-rose-400 font-extrabold');
+            
+            scrambledCardEl.classList.remove('border-emerald-500/60', 'glow-emerald');
+            scrambledCardEl.classList.add('border-rose-500/80', 'shadow-[0_0_25px_rgba(244,63,94,0.3)]');
+
+            setTimeout(() => {
+                scrambledCardEl.classList.remove('border-rose-500/80', 'shadow-[0_0_25px_rgba(244,63,94,0.3)]');
+                scrambledCardEl.classList.add('border-emerald-500/60', 'glow-emerald');
+                userInputEl.disabled = false;
+                nextWord();
+            }, 2000);
+        }
+
+        function loadWord() {
+            hintExtraUsed = false;
+            hintBoxEl.classList.remove('hidden');
+            hintBtnEl.disabled = false;
+            hintBtnEl.classList.remove('opacity-40', 'cursor-not-allowed');
+
+            feedbackEl.textContent = '';
+            userInputEl.value = '';
+            userInputEl.disabled = false;
+            userInputEl.focus();
+
+            progressEl.textContent = `${currentWordIndex + 1}/${gameWords.length}`;
+            progressEl.setAttribute('aria-label', `Progress level: ${currentWordIndex + 1} of ${gameWords.length}`);
+
+            const currentItem = gameWords[currentWordIndex];
+            currentScrambled = getScrambledWord(currentItem.name);
+
+            hintTextEl.textContent = currentItem.hint;
+
+            scrambledWordEl.innerHTML = '';
+            scrambledWordEl.setAttribute('aria-label', `Scrambled letters: ${currentScrambled.toUpperCase().split('').join(' ')}`);
+
+            currentScrambled.toUpperCase().split('').forEach((char, i) => {
+                const tile = document.createElement('div');
+                tile.className = 'letter-tile bg-gradient-to-b from-slate-800 to-slate-900 border border-emerald-500/40 text-emerald-300 font-black text-xl sm:text-2xl w-10 h-11 sm:w-12 sm:h-13 rounded-xl flex items-center justify-center shadow-lg shadow-black/40 select-none';
+                tile.style.animationDelay = `${i * 0.05}s`;
+                tile.textContent = char;
+                scrambledWordEl.appendChild(tile);
+            });
+
+            startTimer();
+        }
+
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            soundSynth.playBoop();
+
+            if (timeLeft <= 0 || userInputEl.disabled) return;
+
+            const userGuess = userInputEl.value.trim().toLowerCase();
+            const targetWord = gameWords[currentWordIndex].name.toLowerCase();
+
+            if (!userGuess) return;
+
+            if (userGuess === targetWord) {
+                clearInterval(timerInterval);
+                soundSynth.playCorrect();
+
+                solvedCount++;
+                scoreEl.textContent = `${solvedCount}/${gameWords.length}`;
+                scoreEl.setAttribute('aria-label', `Score: ${solvedCount} of ${gameWords.length}`);
+
+                userInputEl.disabled = true;
+
+                if (typeof confetti === 'function') {
+                    confetti({
+                        particleCount: 45,
+                        spread: 60,
+                        origin: { y: 0.7 },
+                        colors: ['#27ae60', '#2ecc71', '#f1c40f', '#ffffff']
+                    });
+                }
+
+                showFeedback('Correct! Good job!', 'text-emerald-400 font-black text-base animate-bounce-short');
+                
+                scrambledCardEl.classList.add('glow-emerald-lg', 'border-emerald-400');
+
+                setTimeout(() => {
+                    scrambledCardEl.classList.remove('glow-emerald-lg', 'border-emerald-400');
+                    nextWord();
+                }, 1200);
+
+            } else {
+                soundSynth.playWrong();
+                showFeedback('Incorrect! Keep trying.', 'text-rose-400 font-extrabold');
+
+                userInputEl.classList.add('shake', 'border-rose-500');
+                setTimeout(() => {
+                    userInputEl.classList.remove('shake', 'border-rose-500');
+                }, 450);
+                userInputEl.focus();
+            }
+        }
+
+        function revealExtraHint() {
+            soundSynth.playBoop();
+            if (hintExtraUsed || timeLeft <= 0) return;
+            hintExtraUsed = true;
+
+            const targetWord = gameWords[currentWordIndex].name;
+            const currentHint = gameWords[currentWordIndex].hint;
+            
+            hintTextEl.textContent = `${currentHint} • First: "${targetWord.charAt(0).toUpperCase()}", Last: "${targetWord.slice(-1).toUpperCase()}"`;
+
+            hintBtnEl.disabled = true;
+            hintBtnEl.classList.add('opacity-40', 'cursor-not-allowed');
+        }
+
+        function skipWord() {
+            if (timeLeft <= 0) return;
+            soundSynth.playBoop();
+            clearInterval(timerInterval);
+
+            showFeedback(`Skipped! It was "${gameWords[currentWordIndex].name.toUpperCase()}"`, 'text-amber-300 font-bold');
+            setTimeout(() => {
+                nextWord();
+            }, 1000);
+        }
+
+        function nextWord() {
+            clearInterval(timerInterval);
+            currentWordIndex++;
+            if (currentWordIndex < gameWords.length) {
+                loadWord();
+            } else {
+                endGame();
+            }
+        }
+
+        function showFeedback(msg, cssClasses) {
+            feedbackEl.className = `text-center font-bold text-sm min-h-[24px] flex items-center justify-center transition-all duration-200 ${cssClasses}`;
+            feedbackEl.textContent = msg;
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+
+            statsBarEl.classList.add('hidden');
+            gameControlsEl.classList.add('hidden');
+            hintBoxEl.classList.add('hidden');
+            wordPromptLabelEl.innerHTML = `<i class="fa-solid fa-flag-checkered text-xs" aria-hidden="true"></i> Final Results`;
+
+            scrambledWordEl.innerHTML = `
+                <div class="letter-tile bg-gradient-to-r from-rose-600 to-rose-700 text-white font-black text-2xl sm:text-3xl px-6 py-3 rounded-2xl border border-rose-400/40 shadow-xl tracking-wider my-2">
+                    GAME OVER
+                </div>
+            `;
+            scrambledWordEl.setAttribute('aria-label', 'Game Over');
+
+            const pct = Math.round((solvedCount / gameWords.length) * 100);
+            gameOverFinalScoreEl.textContent = `Final Score: ${solvedCount}/${gameWords.length}`;
+            gameOverAccuracyEl.textContent = `Accuracy: ${pct}%`;
+            
+            if (pct === 100) {
+                gameOverRatingEl.textContent = "🏆 Perfect Score! You're a Master Unscrambler!";
+            } else if (pct >= 70) {
+                gameOverRatingEl.textContent = "🌟 Fantastic job! Impressive vocabulary!";
+            } else if (pct >= 40) {
+                gameOverRatingEl.textContent = "👍 Good try! Keep practicing to beat your score.";
+            } else {
+                gameOverRatingEl.textContent = "💪 Don't give up! Try again to improve!";
+            }
+
+            gameOverDetailsEl.classList.remove('hidden');
+
+            if (typeof confetti === 'function' && solvedCount >= 5) {
+                confetti({
+                    particleCount: 120,
+                    spread: 90,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+
+        function restartGame() {
+            soundSynth.playBoop();
+            initGame();
+        }
+
+        window.onload = () => {
+            initGame();
+        };
+    </script>
+</body>
+</html>
